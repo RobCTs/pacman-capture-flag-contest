@@ -33,7 +33,7 @@ from contest.util import nearestPoint
 #################
 
 def create_team(first_index, second_index, is_red,
-                first='OffensiveReflexAgent', second='DefensiveReflexAgent', num_training=0):
+                first='OffensiveGoodAgent', second='DefensiveGoodAgent', num_training=0):
     """
     This function should return a list of two agents that will form the
     team, initialized using firstIndex and secondIndex as their agent
@@ -55,9 +55,9 @@ def create_team(first_index, second_index, is_red,
 # Agents #
 ##########
 
-class ReflexCaptureAgent(CaptureAgent):
+class GoodCaptureAgent(CaptureAgent):
     """
-    A base class for reflex agents that choose score-maximizing actions
+    A base class for agents that choose score-maximizing actions
     """
 
     def __init__(self, index, time_for_computing=.1):
@@ -135,9 +135,9 @@ class ReflexCaptureAgent(CaptureAgent):
         return {'successor_score': 1.0}
 
 
-class OffensiveReflexAgent(ReflexCaptureAgent):
+class OffensiveGoodAgent(GoodCaptureAgent):
     """
-  A reflex agent that seeks food. This is an agent
+  An agent that seeks food. This is an agent
   we give you to get an idea of what an offensive agent might look like,
   but it is by no means the best or only way to build an offensive agent.
   """
@@ -160,9 +160,9 @@ class OffensiveReflexAgent(ReflexCaptureAgent):
         return {'successor_score': 100, 'distance_to_food': -1}
 
 
-class DefensiveReflexAgent(ReflexCaptureAgent):
+class DefensiveGoodAgent(GoodCaptureAgent):
     """
-    A reflex agent that keeps its side Pacman-free. Again,
+    An agent that keeps its side Pacman-free. Again,
     this is to give you an idea of what a defensive agent
     could be like.  It is not the best or only way to make
     such an agent.
