@@ -64,6 +64,8 @@ class GoodCaptureAgent(CaptureAgent):
         super().__init__(index, time_for_computing)
         self.start = None
 
+        #self.numCarrying = 0
+
     def register_initial_state(self, game_state):
         self.start = game_state.get_agent_position(self.index)
         CaptureAgent.register_initial_state(self, game_state)
@@ -145,17 +147,77 @@ class OffensiveGoodAgent(GoodCaptureAgent):
     def get_features(self, game_state, action):
         features = util.Counter()
         successor = self.get_successor(game_state, action)
+
+        currState = self.get_current_observation()
+        curr_food_list = self.get_food(currState).as_list()
+        
+        my_pos = successor.get_agent_state(self.index).get_position()
+
         food_list = self.get_food(successor).as_list()
-        features['successor_score'] = -len(food_list)  # self.getScore(successor)
+        #features['successor_score'] = -len(food_list) 
 
-        # Compute distance to the nearest food 
-
-        if len(food_list) > 0:  # This should always be True,  but better safe than sorry
-            my_pos = successor.get_agent_state(self.index).get_position()
+        # Consider the game score
+        features['successor_score'] = self.get_score(successor) 
+        
+        # Compute distance to the nearest food
+        if len(food_list) > 0:  # This should always be True,  but better safe than sorry 
             min_distance = min([self.get_maze_distance(my_pos, food) for food in food_list])
             features['distance_to_food'] = min_distance
+        
+        # Consider the amount of food pacman is carrying
+        #nr of food of successor:
+        num_succ = 0
+        for i in food_list:
+            if i == True:
+                num_succ +=1
+        num_curr = 0
+        #nr of food of currState
+        for i in curr_food_list:
+            if i == True:
+                num_curr +=1
+        diff = num_curr - num_succ
+        
+        #if diff < 0: #negative difference means more food in future state that current state, e.g. pacman has died
+        #    self.numCarrying = num_succ
+        #else: #positive diff (more food in curr state than future state, e.g. pacman has returned successfully) or no change e.g. no food eaten
+        #    self.numCarrying = num_curr
+        #print("num Carrying: ", OffensiveReflexAgent.numCarrying)
+        #features['numCarrying'] = OffensiveReflexAgent.numCarrying
 
         
+        cap_list = self.get_capsules(successor)
+        # Compute distance to the nearest power pellet/capsule
+        if len(cap_list) > 0:
+            min_distance = min([self.get_maze_distance(my_pos, c) for c in cap_list])
+            features['distance_to_capsule'] = min_distance
+        
+        # Comput distance to the nearest opponent
+        opp_index = self.get_opponents(currState)
+        opponents_pos = []
+        if len(opp_index) > 0:
+            for i in opp_index:
+                tmp = currState.get_agent_position(i)
+                if tmp != None: #get_agent_pos might return None
+                    opponents_pos.append(tmp)
+        if len(opponents_pos) > 0:    
+            min_dist = min([self.get_maze_distance(my_pos, o) for o in opponents_pos])
+            features['distance_to_opponent'] = min_dist#*10
+        
+        # Consider where the home is (e.g. to return after collecting food)
+        #print("gamestate.data.layout.width", game_state.data.layout.width) #returns width of the grid aka e.g. 32 
+        # Compute distance to nearest home tile/cell
+        valid_homes = []
+        # 2 walls on each side so width of actual home territory = (game_state.data.layout.width-2) /2
+        h_width = (game_state.data.layout.width-2) /2
+        h_height = (game_state.data.layout.height-2) /2
+        for x in range(1,int(h_width+1)):     #TODO possibly check if correct x and y values (e.g. if not start from 0 instead and end at height+1)
+            for y in range(1,int(h_height+1)):
+                if not successor.has_wall(x,y):
+                    valid_homes.append((x,y))
+        
+        #min_home = min([self.get_maze_distance(my_pos, h) for h in valid_homes])
+        #features['home'] = min_home
+
         return features
 
     def get_weights(self, game_state, action):
