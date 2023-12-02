@@ -143,46 +143,24 @@ class OffensiveGoodAgent(GoodCaptureAgent):
   we give you to get an idea of what an offensive agent might look like,
   but it is by no means the best or only way to build an offensive agent.
   """
+    global numCarrying
+    numCarrying = 0
+
+    #TODO: rewrite the ReflexCaptureAgent's get action method
+    def get_action(self, game_state):
+        return super().get_action(game_state)
 
     def get_features(self, game_state, action):
         features = util.Counter()
         successor = self.get_successor(game_state, action)
-
-        currState = self.get_current_observation()
-        curr_food_list = self.get_food(currState).as_list()
-        
-        my_pos = successor.get_agent_state(self.index).get_position()
-
         food_list = self.get_food(successor).as_list()
-        #features['successor_score'] = -len(food_list) 
+        features['successor_score'] = -len(food_list)  # self.getScore(successor)
 
-        # Consider the game score
-        features['successor_score'] = self.get_score(successor) 
-        
         # Compute distance to the nearest food
-        if len(food_list) > 0:  # This should always be True,  but better safe than sorry 
+        if len(food_list) > 0:  # This should always be True,  but better safe than sorry
+            my_pos = successor.get_agent_state(self.index).get_position()
             min_distance = min([self.get_maze_distance(my_pos, food) for food in food_list])
             features['distance_to_food'] = min_distance
-        
-        # Consider the amount of food pacman is carrying
-        #nr of food of successor:
-        num_succ = 0
-        for i in food_list:
-            if i == True:
-                num_succ +=1
-        num_curr = 0
-        #nr of food of currState
-        for i in curr_food_list:
-            if i == True:
-                num_curr +=1
-        diff = num_curr - num_succ
-        
-        #if diff < 0: #negative difference means more food in future state that current state, e.g. pacman has died
-        #    self.numCarrying = num_succ
-        #else: #positive diff (more food in curr state than future state, e.g. pacman has returned successfully) or no change e.g. no food eaten
-        #    self.numCarrying = num_curr
-        #print("num Carrying: ", OffensiveReflexAgent.numCarrying)
-        #features['numCarrying'] = OffensiveReflexAgent.numCarrying
 
         
         cap_list = self.get_capsules(successor)
@@ -192,17 +170,17 @@ class OffensiveGoodAgent(GoodCaptureAgent):
             features['distance_to_capsule'] = min_distance
         
         # Comput distance to the nearest opponent
-        opp_index = self.get_opponents(currState)
+        opp_index = self.get_opponents(successor)
         opponents_pos = []
         if len(opp_index) > 0:
             for i in opp_index:
-                tmp = currState.get_agent_position(i)
+                tmp = successor.get_agent_position(i)
                 if tmp != None: #get_agent_pos might return None
                     opponents_pos.append(tmp)
         if len(opponents_pos) > 0:    
             min_dist = min([self.get_maze_distance(my_pos, o) for o in opponents_pos])
             features['distance_to_opponent'] = min_dist#*10
-        
+
         # Consider where the home is (e.g. to return after collecting food)
         #print("gamestate.data.layout.width", game_state.data.layout.width) #returns width of the grid aka e.g. 32 
         # Compute distance to nearest home tile/cell
@@ -215,9 +193,27 @@ class OffensiveGoodAgent(GoodCaptureAgent):
                 if not successor.has_wall(x,y):
                     valid_homes.append((x,y))
         
-        #min_home = min([self.get_maze_distance(my_pos, h) for h in valid_homes])
-        #features['home'] = min_home
+        min_home = min([self.get_maze_distance(my_pos, h) for h in valid_homes])
+        features['home'] = min_home
 
+        # Consider the amount of food pacman is carrying
+        currState = self.get_previous_observation() #current observation food list same as successor, gotta use previous  
+        if currState != None:
+            curr_food_list = self.get_food(currState).as_list()
+            print("currFoodLength: ", len(curr_food_list))     
+            print("succFoodLength: ", len(food_list))
+            diff = len(curr_food_list) - len(food_list)
+
+            numCarrying = diff
+            if diff < 0: #negative difference means more food in future state that current state, e.g. pacman has died
+                #reset nr of carrying food to 0
+                numCarrying = 0 #num_succ
+            #TODO maybe add something to check if pacman has returned home with the food or not (or does food disappear from food_list once you bring it back home?)
+            print("num Carrying: ", numCarrying)
+            features['numCarrying'] = diff
+        else:
+            #no previous observation available e.g. first/starting state
+            features['numCarrying'] = 0
         return features
 
     def get_weights(self, game_state, action):
