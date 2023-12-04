@@ -144,29 +144,40 @@ class OffensiveGoodAgent(GoodCaptureAgent):
   but it is by no means the best or only way to build an offensive agent.
   """
     global numCarrying 
-    numCarrying = 0 
+    #numCarrying = 0 
     
     def getNumCarrying(self, game_state, action):
-        currState = self.get_previous_observation() #current observation food list same as successor, gotta use previous  
-        successor = self.get_successor(game_state, action)
-        food_list = self.get_food(successor).as_list()
-        if currState != None:
-            curr_food_list = self.get_food(currState).as_list()
-            #print("currFoodLength: ", len(curr_food_list))     
-            #print("succFoodLength: ", len(food_list))
-            diff = len(curr_food_list) - len(food_list)
-            if 'numCarrying' in locals():
-                numCarrying += diff 
-                print("NUMCARRYING: ", numCarrying)
-            if diff < 0: #negative difference means more food in future state that current state, i.e. pacman has died
+        prev = self.get_previous_observation() #current observation food list same as successor, gotta use previous  
+        curr = self.get_successor(game_state, action)
+        
+        if prev != None:
+            prev_food_list = self.get_food(prev).as_list()
+            prev_score = prev.get_score()
+            food_list = self.get_food(curr).as_list()
+            score = curr.get_score()
+        
+            diff_curr = len(prev_food_list) - len(food_list) - prev_score
+            #print("diff_curr    ", diff_curr)
+            if diff_curr < 0: #negative difference means more food in future state that current state, i.e. pacman has died
                 #reset nr of carrying food to 0
-                numCarrying = 0 #num_succ
-        else:
-            #no previous observation available e.g. first/starting state
-            numCarrying = 0
-        if 'numCarrying' in locals() or 'numCarrying' in globals():
+                diff_curr = 0 #num_succ
+            #print("diff_curr    ", diff_curr)
+        
+            max_foodLen = 0
+            max_score = -100 #should never occur naturally in the game
+            for h in self.observationHistory:
+                tmp = len(self.get_food(h).as_list())
+                if tmp > max_foodLen:
+                    max_foodLen = tmp
+                    max_score = h.get_score()
+            dif_total = max_foodLen - len(food_list) - prev_score #max_score
+            #print("dif_total   ", dif_total)
+        
+            numCarrying = max(diff_curr, dif_total)
+            #print("NUMCARRYING METHOD: ", numCarrying)
             return numCarrying
-        return 0
+        else:
+            return 0 #return 0 for very first state
     
     def choose_action(self, game_state):
         actions = game_state.get_legal_actions(self.index)
@@ -174,27 +185,27 @@ class OffensiveGoodAgent(GoodCaptureAgent):
         values = []
         for a in actions:
             numCarrying = self.getNumCarrying(game_state, a)
-            print("CHOOSE ACTION NUMCARRYING: ", numCarrying)
+            #print("CHOOSE ACTION NUMCARRYING: ", numCarrying)
             v = self.MCTS(game_state, a, 5, 0, numCarrying)
             values.append(v)
-        #print("Values1: ", values)
-        #values = [self.evaluate(game_state, a, numCarrying) for a in actions]
-        #print("Values2: ", values)
         maxValue = max(values)
+        print(maxValue)
         bestActions = [a for a, v in zip(actions, values) if v == maxValue]
 
         return bestActions[0]
     
     #to update global value from within a function, one has to pass it along every time
     def evaluate(self, game_state, action, numCarrying):
-        print("evaluate NUMCARRYING: ", numCarrying)
+        #print("CURRENT SCORE evaluate: ", game_state.get_score())
+        #print("evaluate NUMCARRYING: ", numCarrying)
         features = self.get_features(game_state, action, numCarrying)
-        weights = self.get_weights(game_state, action)
+        weights = self.get_weights(game_state, action, numCarrying)
         return features * weights
     
     #TODO: possibly improve using ucb (https://www.geeksforgeeks.org/ml-monte-carlo-tree-search-mcts/)
     def MCTS(self, game_state, action, depth, num_iters, numCarrying):
-        print("MCTS NUMCARRYING: ", numCarrying)
+        #print("CURRENT SCORE mcts: ", game_state.get_score())
+        #print("MCTS NUMCARRYING: ", numCarrying)
         n = self.get_successor(game_state, action)
         actions = n.get_legal_actions(self.index)
         #print("actions: ", actions)
@@ -204,7 +215,7 @@ class OffensiveGoodAgent(GoodCaptureAgent):
             a = random.choice(actions)
             value = self.evaluate(game_state, action, numCarrying)
             # backpropagate and update parent nodes based on value of newly added curr child
-            value = value + 0.2 ** num_iters * self.MCTS(n, a, depth - 1, num_iters + 1, numCarrying)
+            value += (0.1 ** num_iters) * self.MCTS(n, a, depth - 1, num_iters + 1, numCarrying)
             return value
         else:
             return self.evaluate(game_state, action, numCarrying)
@@ -275,12 +286,13 @@ class OffensiveGoodAgent(GoodCaptureAgent):
         # Consider the amount of food pacman is carrying
         currState = self.get_previous_observation() #current observation food list same as successor, gotta use previous  
         if currState != None:
+            #print("CURRENT SCORE features: ", successor.get_score())
             curr_food_list = self.get_food(currState).as_list()
-            print("currFoodLength: ", len(curr_food_list))     
-            print("succFoodLength: ", len(food_list))
-            diff = len(curr_food_list) - len(food_list)
+            #print("currFoodLength: ", len(curr_food_list))     
+            #print("succFoodLength: ", len(food_list))
+            diff = len(curr_food_list) - len(food_list) - currState.get_score()
             
-            numCarrying += diff 
+            #numCarrying += diff 
             
             if diff < 0: #negative difference means more food in future state that current state, i.e. pacman has died
                 #reset nr of carrying food to 0
@@ -288,27 +300,22 @@ class OffensiveGoodAgent(GoodCaptureAgent):
         else:
             #no previous observation available e.g. first/starting state
             numCarrying = 0
-        if numCarrying <=2:
-            features['num_carrying'] = numCarrying
-        else: 
-            features['num_carrying'] = numCarrying/3 #force agent to go back more quickly when holding more food
-        print("NUMCARRYING: ", numCarrying)
+        #if numCarrying <=5:
+        features['num_carrying'] = numCarrying
+        #else: 
+        #    features['num_carrying'] = numCarrying/3 #force agent to go back more quickly when holding more food
+        #print("NUMCARRYING: ", numCarrying)
         return features
 
-    def get_weights(self, game_state, action):
-        
-        #really force agent to return home consistently after carrying more than 3 food
-        successor = self.get_successor(game_state, action)
-        my_pos = successor.get_agent_state(self.index).get_position()
-        food_list = self.get_food(successor).as_list()
-        
-        if numCarrying >=3:
-            return  {'successor_score': 5, 'distance_to_food': 0, 'distance_to_capsule': 0, 'distance_to_opponent': 1, 'home': -10,
+    def get_weights(self, game_state, action, numCarrying):
+        #really force agent to return home consistently after carrying more than 3 food    
+        #print("NUMCAEEYINF WEIGHTS: ", numCarrying)
+        if numCarrying >=4:
+            return  {'successor_score': 0, 'distance_to_food': 0, 'distance_to_capsule': 0, 'distance_to_opponent': 4, 'home': -10,
                 'num_carrying': 0}
-        
+        #TODO: change priority to getting away from ghost if chased (increase distance_to_opponent weight compared to food)
         return {'successor_score': 10, 'distance_to_food': -2, 'distance_to_capsule': -1, 'distance_to_opponent': 1, 'home': -1,
                 'num_carrying': 5}
-
 
 class DefensiveGoodAgent(GoodCaptureAgent):
     """
