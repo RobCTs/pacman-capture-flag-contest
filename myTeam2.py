@@ -35,7 +35,7 @@ from contest.util import nearestPoint
 #################
 
 def create_team(first_index, second_index, is_red,
-                first='OffensiveGoodAgent', second='DefensiveReflexAgent', num_training=0):
+                first='OffensiveGoodAgent', second='DefensiveGoodAgent', num_training=0):
     """
     This function should return a list of two agents that will form the
     team, initialized using firstIndex and secondIndex as their agent
@@ -59,12 +59,14 @@ def create_team(first_index, second_index, is_red,
 
 class GoodCaptureAgent(CaptureAgent):
     """
-    A base class for reflex agents that choose score-maximizing actions
+    A base class for agents that choose score-maximizing actions
     """
 
     def __init__(self, index, time_for_computing=.1):
         super().__init__(index, time_for_computing)
         self.start = None
+
+        #self.numCarrying = 0
 
     def register_initial_state(self, game_state):
         self.start = game_state.get_agent_position(self.index)
@@ -314,11 +316,10 @@ class OffensiveGoodAgent(GoodCaptureAgent):
             return  {'successor_score': 0, 'distance_to_food': 0, 'distance_to_capsule': 0, 'distance_to_opponent': 4, 'home': -10,
                 'num_carrying': 0}
         #TODO: change priority to getting away from ghost if chased (increase distance_to_opponent weight compared to food)
-        return {'successor_score': 10, 'distance_to_food': -2, 'distance_to_capsule': -1, 'distance_to_opponent': 2, 'home': -1,
+        return {'successor_score': 10, 'distance_to_food': -2, 'distance_to_capsule': -1, 'distance_to_opponent': 1, 'home': -1,
                 'num_carrying': 5}
 
-
-class DefensiveReflexAgent(GoodCaptureAgent):
+class DefensiveGoodAgent(GoodCaptureAgent):
     """
     A reflex agent that keeps its side Pacman-free. Again,
     this is to give you an idea of what a defensive agent
@@ -328,7 +329,7 @@ class DefensiveReflexAgent(GoodCaptureAgent):
 
     # inharit features from parents
     def __init__(self, *args, **kwargs):
-        super(DefensiveReflexAgent, self).__init__(*args, **kwargs)
+        super(GoodCaptureAgent, self).__init__(*args, **kwargs)
 
     def get_features(self, game_state, action):
         features = util.Counter()
@@ -336,7 +337,7 @@ class DefensiveReflexAgent(GoodCaptureAgent):
 
         my_state = successor.get_agent_state(self.index)
         my_pos = my_state.get_position()
-        print("Current position:", my_pos)
+        #print("Current position:", my_pos)
 
         # Computes whether we're on defense (1) or offense (0)
         features['on_defense'] = 1
@@ -389,7 +390,7 @@ class DefensiveReflexAgent(GoodCaptureAgent):
          """
         my_state = game_state.get_agent_state(self.index)
         my_pos = my_state.get_position()
-        print("Current positionPatrol:", my_pos)
+        #print("Current positionPatrol:", my_pos)
 
         # Define key patrol points (static or dynamically determined)
         patrol_points = self.get_patrol_points(game_state)
@@ -491,4 +492,4 @@ class DefensiveReflexAgent(GoodCaptureAgent):
             weights['patrol_distance'] *= 1
 
         return weights
-    
+      
