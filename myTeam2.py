@@ -22,6 +22,7 @@
 
 import random
 import contest.util as util
+import sklearn
 from sklearn.cluster import DBSCAN
 import numpy as np
 
