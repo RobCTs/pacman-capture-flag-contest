@@ -22,7 +22,8 @@
 
 import random
 import contest.util as util
-import scikit-learn
+import os 
+os.system('pip install scikit-learn')
 from sklearn.cluster import DBSCAN
 import numpy as np
 
