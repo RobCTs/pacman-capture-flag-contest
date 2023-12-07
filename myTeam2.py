@@ -22,6 +22,10 @@
 
 import random
 import contest.util as util
+import os 
+os.system('pip install scikit-learn')
+from sklearn.cluster import DBSCAN
+import numpy as np
 
 from contest.captureAgents import CaptureAgent
 from contest.game import Directions
@@ -189,7 +193,7 @@ class OffensiveGoodAgent(GoodCaptureAgent):
             v = self.MCTS(game_state, a, 5, 0, numCarrying)
             values.append(v)
         maxValue = max(values)
-        print(maxValue)
+        #print(maxValue)
         bestActions = [a for a, v in zip(actions, values) if v == maxValue]
 
         return bestActions[0]
@@ -319,11 +323,15 @@ class OffensiveGoodAgent(GoodCaptureAgent):
 
 class DefensiveGoodAgent(GoodCaptureAgent):
     """
-    An agent that keeps its side Pacman-free. Again,
+    A reflex agent that keeps its side Pacman-free. Again,
     this is to give you an idea of what a defensive agent
     could be like.  It is not the best or only way to make
     such an agent.
     """
+
+    # inharit features from parents
+    def __init__(self, *args, **kwargs):
+        super(GoodCaptureAgent, self).__init__(*args, **kwargs)
 
     def get_features(self, game_state, action):
         features = util.Counter()
@@ -331,6 +339,7 @@ class DefensiveGoodAgent(GoodCaptureAgent):
 
         my_state = successor.get_agent_state(self.index)
         my_pos = my_state.get_position()
+        #print("Current position:", my_pos)
 
         # Computes whether we're on defense (1) or offense (0)
         features['on_defense'] = 1
@@ -343,12 +352,146 @@ class DefensiveGoodAgent(GoodCaptureAgent):
         if len(invaders) > 0:
             dists = [self.get_maze_distance(my_pos, a.get_position()) for a in invaders]
             features['invader_distance'] = min(dists)
+        # Implementation
+        else:
+            # Patrolling strategy when no invaders are visible
+            features['patrol_distance'] = self.get_patrol_distance(successor) #changed it from game_state
 
+        # Encoding the actions if we need to use it for rewards
         if action == Directions.STOP: features['stop'] = 1
         rev = Directions.REVERSE[game_state.get_agent_state(self.index).configuration.direction]
         if action == rev: features['reverse'] = 1
 
         return features
+    
+
+    # Defining patrol points
+    def get_patrol_points(self, game_state):
+        """
+        Identify dynamic patrol points focusing on areas near remaining food
+        and the nearest power capsule position.
+        """
+        patrol_points = []
+
+        food_list = self.get_food(game_state).as_list()
+        nearest_food_in_cluster = self.cluster_food(game_state, food_list)
+        patrol_points.append(nearest_food_in_cluster)
+
+
+        # Include additional strategic points like the nearest power capsule position
+        power_capsule_position = self.get_power_capsule_position(game_state)
+        if power_capsule_position:
+            patrol_points.append(power_capsule_position) 
+
+        return patrol_points
+    
+    #patrolling strategies
+    def get_patrol_distance(self, game_state):
+        """
+        Calculate the average distance to key patrol points.
+         """
+        my_state = game_state.get_agent_state(self.index)
+        my_pos = my_state.get_position()
+        #print("Current positionPatrol:", my_pos)
+
+        # Define key patrol points (static or dynamically determined)
+        patrol_points = self.get_patrol_points(game_state)
+
+        # Calculate distances to each patrol point
+        #distances = [self.get_maze_distance(tuple(my_pos), tuple(point)) for point in patrol_points] # point is a np.array, but it needs to be a tuple
+        distances = [self.get_maze_distance(tuple(map(int, my_pos)), tuple(map(int, point))) for point in patrol_points]
+
+        # Return the average distance
+        if distances:
+            return sum(distances) / len(distances)
+        else:
+            return 0
+    
+
+    def cluster_food(self, game_state, food_list, eps=3, min_samples=2):
+        """
+    Cluster food pellets using DBSCAN.
+
+    :param food_list: List of food pellet coordinates.
+    :param eps: The maximum distance between two samples for one to be considered as in the neighborhood of the other.
+    :param min_samples: The number of samples in a neighborhood for a point to be considered as a core point.
+    :return: List of clusters with their food pellet coordinates.
+        """
+        # Convert food_list to a numpy array for DBSCAN
+        food_array = np.array(food_list)
+
+        # Apply DBSCAN clustering
+        dbscan = DBSCAN(eps=eps, min_samples=min_samples)
+        dbscan.fit(food_array)
+
+        # Extract clustered food pellets
+        clusters = [food_array[dbscan.labels_ == label] for label in set(dbscan.labels_) if label != -1]
+
+        if not clusters:
+            return None
+
+        # Find the largest cluster
+        largest_cluster = max(clusters, key=len)
+
+        # Get current position of the agent
+        my_pos = game_state.get_agent_state(self.index).get_position()
+
+        # Find the nearest food in the largest cluster
+        nearest_food = min(largest_cluster, key=lambda food: self.get_maze_distance(my_pos, tuple(food)))
+
+        return tuple(nearest_food)
+
+
+    def get_power_capsule_position(self, game_state):
+        """
+        Find and return the position of the nearest power capsule.
+        """
+        my_state = game_state.get_agent_state(self.index)
+        my_pos = my_state.get_position()
+        capsules = game_state.get_capsules()
+
+        if capsules:
+            return min(capsules, key=lambda pos: self.get_maze_distance(my_pos, pos))
+        else:
+            return None
+    
 
     def get_weights(self, game_state, action):
-        return {'num_invaders': -1000, 'on_defense': 100, 'invader_distance': -10, 'stop': -100, 'reverse': -2}
+        """
+    Dynamically adjust weights based on the current game state.
+        """
+
+        # Default weights
+        weights = {
+            'num_invaders': -1000, 
+            'on_defense': 100, 
+            'invader_distance': -10, 
+            'stop': -100, 
+            'reverse': -2,
+            'patrol_distance': -5  # Weight for patrol distance
+            }
+
+        # Adjust weights based on specific game state conditions
+        my_state = game_state.get_agent_state(self.index)
+        my_pos = my_state.get_position()
+        enemies = [game_state.get_agent_state(i) for i in self.get_opponents(game_state)]
+        invaders = [a for a in enemies if a.is_pacman and a.get_position() is not None]
+
+        # Example: Increase the penalty for stopping if there are invaders close by
+        if invaders:
+            closest_invader_distance = min([self.get_maze_distance(my_pos, a.get_position()) for a in invaders])
+            if closest_invader_distance < 5:  # If an invader is very close
+                weights['stop'] -= 50  # Increase the penalty for stopping
+
+        # Example: Adjust weights based on the remaining food and moves
+        remaining_food = len(self.get_food_you_are_defending(game_state).as_list())
+        remaining_moves = game_state.data.timeleft
+        total_moves = 1200  # Total moves before the game ends
+
+        if remaining_food <= 4 or remaining_moves < total_moves / 4:
+            weights['num_invaders'] *=3 
+            weights['on_defense'] *= 2
+            weights['patrol_distance'] *= 1
+
+        return weights
+      
